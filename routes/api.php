@@ -5,8 +5,8 @@ use App\Http\Controllers\Api\ContributionController;
 use App\Http\Controllers\Api\GroupController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PayoutController;
-use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\PaystackWebhookController;
+use App\Http\Controllers\Api\TransactionController;
 use App\Http\Middleware\EnsureApiToken;
 use Illuminate\Support\Facades\Route;
 
@@ -23,7 +23,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('groups', [GroupController::class, 'index']);
         Route::post('groups', [GroupController::class, 'store']);
         Route::post('groups/join', [GroupController::class, 'join']);
-        Route::post('groups/lookup', [GroupController::class, 'lookup']);
+        Route::post('groups/lookup', [GroupController::class, 'lookup'])->middleware('throttle:30,1');
         Route::get('groups/{group}', [GroupController::class, 'show']);
         Route::get('groups/{group}/schedule', [GroupController::class, 'schedule']);
         Route::get('groups/{group}/contributions', [GroupController::class, 'contributions']);

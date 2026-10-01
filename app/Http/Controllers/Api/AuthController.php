@@ -7,9 +7,10 @@ use App\Http\Requests\RegisterRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -44,7 +45,7 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         $request->validate(['refresh_token' => ['nullable', 'string']]);
-        $refreshToken = \Laravel\Sanctum\PersonalAccessToken::findToken($request->input('refresh_token', ''));
+        $refreshToken = PersonalAccessToken::findToken($request->input('refresh_token', ''));
         if ($refreshToken && $refreshToken->tokenable_id === $request->user()->id && $refreshToken->can('refresh')) {
             $refreshToken->delete();
         }
@@ -57,16 +58,24 @@ class AuthController extends Controller
     {
         $request->validate(['refresh_token' => ['required', 'string']]);
         $tokens = DB::transaction(function () use ($request): ?array {
-            $candidate = \Laravel\Sanctum\PersonalAccessToken::findToken($request->input('refresh_token'));
-            if (! $candidate) return null;
-            $token = \Laravel\Sanctum\PersonalAccessToken::whereKey($candidate->id)->lockForUpdate()->first();
-            if (! $token || ! $token->can('refresh') || $token->expires_at?->isPast()) return null;
+            $candidate = PersonalAccessToken::findToken($request->input('refresh_token'));
+            if (! $candidate) {
+                return null;
+            }
+            $token = PersonalAccessToken::whereKey($candidate->id)->lockForUpdate()->first();
+            if (! $token || ! $token->can('refresh') || $token->expires_at?->isPast()) {
+                return null;
+            }
             $user = User::find($token->tokenable_id);
-            if (! $user) return null;
+            if (! $user) {
+                return null;
+            }
             $token->delete();
+
             return $this->issueTokens($user);
         });
         abort_unless($tokens, 401);
+
         return response()->json($tokens);
     }
 

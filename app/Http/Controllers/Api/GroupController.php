@@ -71,7 +71,7 @@ class GroupController extends Controller
         $data = $request->validate(['invite_code' => ['required', 'string', 'max:16']]);
 
         $group = DB::transaction(function () use ($request, $data): SavingsGroup {
-            $group = SavingsGroup::where('invite_code', Str::upper($data['invite_code']))
+            $group = SavingsGroup::where('invite_code', Str::upper(trim($data['invite_code'])))
                 ->lockForUpdate()->firstOrFail();
 
             if ($group->members()->where('user_id', $request->user()->id)->exists()) {
