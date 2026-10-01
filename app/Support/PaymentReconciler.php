@@ -37,6 +37,8 @@ class PaymentReconciler
                     if ($contribution->status !== 'paid') {
                         $contribution->update(['status' => 'failed']);
                     }
+                } else {
+                    $locked->touch();
                 }
 
                 return;

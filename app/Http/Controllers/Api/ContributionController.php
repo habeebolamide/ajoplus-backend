@@ -28,6 +28,10 @@ class ContributionController extends Controller
             }
             $existing = PaymentAttempt::where('contribution_id', $locked->id)
                 ->whereIn('status', ['initializing', 'pending'])->latest()->first();
+            if ($existing?->status === 'initializing' && $existing->created_at->lt(now()->subMinutes(2))) {
+                $existing->update(['status' => 'failed']);
+                $existing = null;
+            }
             if ($existing) {
                 return $existing;
             }
