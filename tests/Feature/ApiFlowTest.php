@@ -116,6 +116,64 @@ class ApiFlowTest extends TestCase
         $this->getJson('/api/v1/groups')->assertOk()->assertJsonCount(0, 'data');
     }
 
+    public function test_organizer_must_approve_members_when_group_requires_approval(): void
+    {
+        $organizer = User::factory()->create();
+        $friend = User::factory()->create();
+        Sanctum::actingAs($organizer, ['api']);
+        $groupId = $this->postJson('/api/v1/groups', $this->groupData([
+            'max_members' => 2,
+            'requires_approval' => true,
+        ]))->assertCreated()->json('id');
+        $group = SavingsGroup::findOrFail($groupId);
+
+        Sanctum::actingAs($friend, ['api']);
+        $this->postJson('/api/v1/groups/lookup', ['invite_code' => $group->invite_code])
+            ->assertOk()
+            ->assertJsonPath('requires_approval', true);
+        $this->postJson('/api/v1/groups/join', ['invite_code' => $group->invite_code])
+            ->assertStatus(202)
+            ->assertJsonPath('join_status', 'pending');
+        $this->assertSame(1, $group->members()->count());
+        $this->assertSame(1, $group->contributions()->count());
+        $this->getJson("/api/v1/groups/$groupId/join-requests")->assertForbidden();
+
+        Sanctum::actingAs($organizer, ['api']);
+        $requestId = $this->getJson("/api/v1/groups/$groupId/join-requests")
+            ->assertOk()->assertJsonCount(1, 'data')->json('data.0.id');
+        $this->postJson("/api/v1/groups/$groupId/join-requests/$requestId/approve")
+            ->assertOk()->assertJsonPath('status', 'approved');
+
+        $this->assertSame(2, $group->members()->count());
+        $this->assertSame(2, $group->contributions()->count());
+        $this->assertSame('active', $group->fresh()->status);
+        Sanctum::actingAs($friend, ['api']);
+        $this->postJson('/api/v1/groups/lookup', ['invite_code' => $group->invite_code])
+            ->assertOk()
+            ->assertJsonPath('join_request_status', 'joined');
+    }
+
+    public function test_member_can_pay_while_group_is_still_forming(): void
+    {
+        config(['services.paystack.secret_key' => 'sk_test_for_tests']);
+        Http::fake(fn ($request) => Http::response(['status' => true, 'data' => [
+            'authorization_url' => 'https://checkout.paystack.com/test-checkout',
+            'reference' => $request['reference'],
+        ]]));
+
+        $creator = User::factory()->create();
+        Sanctum::actingAs($creator, ['api']);
+        $groupId = $this->postJson('/api/v1/groups', $this->groupData(['max_members' => 200]))
+            ->assertCreated()->json('id');
+        $contribution = Contribution::where('group_id', $groupId)->firstOrFail();
+
+        $this->postJson("/api/v1/groups/$groupId/contributions/{$contribution->id}/checkout")
+            ->assertOk()
+            ->assertJsonPath('authorization_url', 'https://checkout.paystack.com/test-checkout');
+
+        $this->assertSame('forming', SavingsGroup::findOrFail($groupId)->status);
+    }
+
     public function test_reconciliation_rejects_amount_mismatch_then_credits_verified_payment(): void
     {
         config(['services.paystack.secret_key' => 'sk_test_for_tests']);
@@ -212,6 +270,7 @@ class ApiFlowTest extends TestCase
             'contribution_amount_kobo' => 125050,
             'frequency' => 'monthly',
             'max_members' => 2,
+            'requires_approval' => false,
             'start_date' => now()->addDay()->toDateString(),
         ], $overrides);
     }

@@ -8,11 +8,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SavingsGroup extends Model
 {
-    protected $fillable = ['creator_id', 'name', 'description', 'contribution_amount_kobo', 'frequency', 'max_members', 'start_date', 'invite_code', 'current_cycle', 'status'];
+    protected $fillable = ['creator_id', 'name', 'description', 'contribution_amount_kobo', 'frequency', 'max_members', 'start_date', 'invite_code', 'current_cycle', 'status', 'requires_approval'];
 
     protected function casts(): array
     {
-        return ['contribution_amount_kobo' => 'integer', 'max_members' => 'integer', 'current_cycle' => 'integer', 'start_date' => 'date:Y-m-d'];
+        return ['contribution_amount_kobo' => 'integer', 'max_members' => 'integer', 'current_cycle' => 'integer', 'start_date' => 'date:Y-m-d', 'requires_approval' => 'boolean'];
     }
 
     public function creator(): BelongsTo
@@ -33,5 +33,10 @@ class SavingsGroup extends Model
     public function payouts(): HasMany
     {
         return $this->hasMany(Payout::class, 'group_id');
+    }
+
+    public function joinRequests(): HasMany
+    {
+        return $this->hasMany(GroupJoinRequest::class, 'group_id');
     }
 }

@@ -23,7 +23,9 @@ class ContributionController extends Controller
         $attempt = DB::transaction(function () use ($group, $contribution, $request): PaymentAttempt {
             $locked = Contribution::whereKey($contribution->id)->lockForUpdate()->firstOrFail();
             $group->refresh();
-            if ($group->status !== 'active' || $locked->cycle !== $group->current_cycle || $locked->status === 'paid') {
+            if (! in_array($group->status, ['forming', 'active'], true)
+                || $locked->cycle !== $group->current_cycle
+                || $locked->status === 'paid') {
                 throw ValidationException::withMessages(['contribution' => 'This contribution cannot be paid now.']);
             }
             $existing = PaymentAttempt::where('contribution_id', $locked->id)

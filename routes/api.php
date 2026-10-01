@@ -24,6 +24,9 @@ Route::prefix('v1')->group(function (): void {
         Route::post('groups', [GroupController::class, 'store']);
         Route::post('groups/join', [GroupController::class, 'join']);
         Route::post('groups/lookup', [GroupController::class, 'lookup'])->middleware('throttle:30,1');
+        Route::get('groups/{group}/join-requests', [GroupController::class, 'joinRequests']);
+        Route::post('groups/{group}/join-requests/{joinRequest}/approve', [GroupController::class, 'approveJoinRequest']);
+        Route::post('groups/{group}/join-requests/{joinRequest}/reject', [GroupController::class, 'rejectJoinRequest']);
         Route::get('groups/{group}', [GroupController::class, 'show']);
         Route::get('groups/{group}/schedule', [GroupController::class, 'schedule']);
         Route::get('groups/{group}/contributions', [GroupController::class, 'contributions']);
