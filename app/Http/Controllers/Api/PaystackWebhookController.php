@@ -19,7 +19,9 @@ class PaystackWebhookController extends Controller
         if ($request->input('event') === 'charge.success') {
             $reference = $request->input('data.reference');
             $attempt = is_string($reference) ? PaymentAttempt::where('reference', $reference)->first() : null;
-            if ($attempt) $reconciler->verify($attempt);
+            if ($attempt) {
+                $reconciler->verify($attempt);
+            }
         }
 
         return response()->json(['received' => true]);

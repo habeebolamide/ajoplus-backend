@@ -28,17 +28,23 @@ class PaymentReconciler
         DB::transaction(function () use ($attempt, $data): void {
             $locked = PaymentAttempt::whereKey($attempt->id)->lockForUpdate()->firstOrFail();
             $contribution = Contribution::whereKey($locked->contribution_id)->lockForUpdate()->firstOrFail();
-            if ($locked->status === 'successful') return;
+            if ($locked->status === 'successful') {
+                return;
+            }
             if (($data['status'] ?? null) !== 'success') {
                 if (in_array($data['status'] ?? null, ['failed', 'abandoned'], true)) {
                     $locked->update(['status' => 'failed']);
-                    if ($contribution->status !== 'paid') $contribution->update(['status' => 'failed']);
+                    if ($contribution->status !== 'paid') {
+                        $contribution->update(['status' => 'failed']);
+                    }
                 }
+
                 return;
             }
             if ($contribution->status === 'paid') {
                 $locked->update(['status' => 'duplicate']);
                 report(new RuntimeException('Duplicate successful Paystack charge: '.$locked->reference));
+
                 return;
             }
             $locked->update(['status' => 'successful']);

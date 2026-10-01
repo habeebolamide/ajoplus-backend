@@ -28,7 +28,9 @@ class ContributionController extends Controller
             }
             $existing = PaymentAttempt::where('contribution_id', $locked->id)
                 ->whereIn('status', ['initializing', 'pending'])->latest()->first();
-            if ($existing) return $existing;
+            if ($existing) {
+                return $existing;
+            }
 
             return PaymentAttempt::create([
                 'contribution_id' => $locked->id,
@@ -45,6 +47,7 @@ class ContributionController extends Controller
             } catch (Throwable $exception) {
                 $attempt->update(['status' => 'failed']);
                 report($exception);
+
                 return response()->json(['message' => 'Payment checkout is unavailable. Please retry.'], 503);
             }
         }
@@ -63,6 +66,7 @@ class ContributionController extends Controller
             $reconciler->verify($attempt);
         } catch (Throwable $exception) {
             report($exception);
+
             return response()->json(['message' => 'Payment verification is unavailable. Please retry.'], 503);
         }
 

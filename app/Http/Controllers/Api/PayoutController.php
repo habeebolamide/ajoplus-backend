@@ -96,6 +96,7 @@ class PayoutController extends Controller
                     ]);
                 }
             }
+
             return $payout;
         });
 

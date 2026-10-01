@@ -10,7 +10,7 @@ class Paystack
     private function request()
     {
         $secret = config('services.paystack.secret_key');
-        if (! is_string($secret) || $secret === '') {
+        if (! is_string($secret) || ! str_starts_with($secret, 'sk_test_')) {
             throw new RuntimeException('Payments are not configured.');
         }
 
