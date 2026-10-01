@@ -1,82 +1,54 @@
 # AjoPlus API
 
-Laravel 12 JSON API for AjoPlus, a Nigerian rotating-savings (ajo/esusu) application. It manages authentication, savings circles, memberships, contributions, payout cycles, transactions, notifications, and Paystack payment verification.
-
-The companion Flutter client is available at [habeebolamide/ajoplus](https://github.com/habeebolamide/ajoplus). Mobile clients authenticate with Sanctum bearer tokens. All monetary values are **integer kobo**, in requests, responses, and MySQL columns. For example, ₦1,250.50 is `125050` kobo. No float, decimal naira, or currency conversion is used in the backend.
-
-> Payment checkout and verification routes are present, but production payment handling requires configured Paystack credentials, verified webhooks, reconciliation, and deployment security review.
+Laravel 12 JSON API for rotating savings groups. It uses MySQL, Sanctum bearer tokens, and integer kobo for every monetary field. The Flutter client is a separate project.
 
 ## Setup
 
-1. Install PHP 8.2+, Composer, Node.js/npm, and MySQL 8+.
-2. Run `composer install`.
-3. Copy `.env.example` to `.env` and set `APP_KEY`, `DB_HOST`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`. Create the configured MySQL database first.
-4. Run `php artisan key:generate` if this is a new `.env`.
-5. Run `php artisan migrate`.
-6. Start the API with `php artisan serve`, or use `composer run dev` to run the API, queue worker, logs, and Vite together.
+1. Install PHP 8.2+, Composer, and MySQL 8+.
+2. Run composer install, copy .env.example to .env, and set APP_KEY and the DB_* variables.
+3. Set PAYSTACK_SECRET_KEY to a Paystack test secret in the backend .env. Never put it in Flutter, Git, or chat. Checkout is unavailable until this is set. The API rejects live keys in test mode.
+4. Run php artisan migrate --force and php artisan serve.
+5. Configure the Paystack test dashboard webhook URL as https://YOUR_API_HOST/api/v1/paystack/webhook. It must be publicly reachable over HTTPS.
+6. Run the Laravel scheduler in deployment to prune expired Sanctum tokens and reconcile pending Paystack payments every five minutes.
 
-The local `.env` is ignored by Git. The API is served at `/api/v1`.
+The local .env is ignored by Git. Configure a real HTTPS APP_URL and TLS termination before exposing the API to devices.
+
+## Authentication
+
+Registration and login return a user, a 15-minute access token, and a 30-day rotating refresh token. Use the access token as Authorization: Bearer TOKEN for protected routes. Send the refresh token to /auth/refresh when access expires. Its old value is revoked on rotation. Logout revokes both tokens. Login, registration, and refresh are rate limited.
 
 ## API
 
-Send `Accept: application/json`. Except for registration and login, send `Authorization: Bearer <token>`.
+All paths are under /api/v1. Send Accept: application/json. Protected routes require an access token.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/auth/register` | Create account and token |
-| POST | `/auth/login` | Create token |
-| POST | `/auth/refresh` | Refresh an access token |
-| GET | `/auth/me` | Current user |
-| POST | `/auth/logout` | Revoke current token |
-| GET, POST | `/groups` | List my groups, create a group |
-| POST | `/groups/join` | Join with `invite_code` |
-| POST | `/groups/lookup` | Look up a group by invite code |
-| GET | `/groups/{group}` | Group, members, current contributions, payouts |
-| GET | `/groups/{group}/schedule` | Fixed payout order and dates |
-| GET | `/groups/{group}/contributions` | Contribution history |
-| POST | `/groups/{group}/contributions/{contribution}/checkout` | Start a Paystack checkout |
-| POST | `/groups/{group}/contributions/{contribution}/verify` | Verify a contribution payment |
-| POST | `/groups/{group}/complete-cycle` | Creator records payout after everyone paid |
-| POST | `/groups/{group}/settle-payout` | Settle a completed payout |
-| GET | `/transactions?type=all\|contribution\|payout` | Transactions for my groups |
-| GET | `/notifications` | My notifications |
-| PATCH | `/notifications/{notification}/read` | Mark my notification read |
-| POST | `/paystack/webhook` | Paystack webhook receiver |
+| POST | /auth/register | Register and issue tokens |
+| POST | /auth/login | Issue tokens |
+| POST | /auth/refresh | Rotate refresh and access tokens |
+| GET | /auth/me | Current user |
+| POST | /auth/logout | Revoke access and refresh tokens |
+| GET, POST | /groups | Paginated memberships and group creation |
+| POST | /groups/lookup | Preview an invite code |
+| POST | /groups/join | Join a group with an invite code |
+| GET | /groups/{group} | Group, members, current contributions, payouts |
+| GET | /groups/{group}/schedule | Payout order and dates |
+| GET | /groups/{group}/contributions | Paginated contribution history |
+| POST | /groups/{group}/contributions/{contribution}/checkout | Paystack hosted checkout URL |
+| POST | /groups/{group}/contributions/{contribution}/verify | Verify payment with Paystack |
+| POST | /paystack/webhook | Signed provider event; no bearer token |
+| POST | /groups/{group}/complete-cycle | Prepare pending payout after all contributions |
+| POST | /groups/{group}/settle-payout | Organizer records completed manual transfer |
+| GET | /transactions | Paginated group transactions |
+| GET | /notifications | Paginated notifications |
+| PATCH | /notifications/{notification}/read | Mark notification read |
 
-### Examples
+Group creation requires a name, integer contribution_amount_kobo, frequency (daily, weekly, biweekly, or monthly), max_members (2-100), and start_date (YYYY-MM-DD). The creator holds payout position 1. The group opens for contributions when all positions fill.
 
-Registration requires `name`, `email`, `password`, and `password_confirmation`; `phone` is optional. Login requires `email` and `password`.
+Paystack checkout amount comes from the stored contribution, never from the client. Verification checks reference, exact integer kobo amount, NGN currency, test domain, and customer email before recording a paid contribution. Webhook signatures are HMAC SHA-512 checked, then the transaction is verified with Paystack again. Repeated verification is idempotent.
 
-Create group:
+Payout preparation does not mark a transfer successful. The organizer must transfer funds manually and then provide an external transfer reference to settle-payout. This is a manual settlement record, not a provider-verified bank transfer.
 
-```json
-{
-  "name": "Market circle",
-  "description": "Monthly savings",
-  "contribution_amount_kobo": 125050,
-  "frequency": "monthly",
-  "max_members": 5,
-  "start_date": "2026-10-01"
-}
-```
+## Verification
 
-The creator gets payout position 1. Members join with `{"invite_code":"CODE"}` and receive the next position. The group becomes active when it is full. For a simulated contribution, send `{"successful":true}` or `{"successful":false}`. The amount always comes from the stored group contribution amount, never from the payment request. Only a member can record their own contribution. The creator can complete a cycle once every member's contribution is paid. The payout is the sum of those integer kobo amounts; the next cycle starts with pending contributions.
-
-## Security and financial rules
-
-- Keep `.env`, Paystack secret keys, database dumps, certificates, and user data out of Git.
-- Verify Paystack webhook signatures; never treat client-reported payment status as authoritative.
-- Apply authorization and group-membership checks to every state-changing request.
-- Use database transactions, idempotency checks, and audit records around payment and payout state changes.
-- Do not log passwords, access tokens, bank details, or full provider payloads.
-
-## Tests and formatting
-
-Run the checks before committing:
-
-```sh
-php artisan test
-vendor/bin/pint --test
-```
-
-Feature tests use an in-memory SQLite database for fast isolation; the configured application database is MySQL.
+Run php artisan test and vendor/bin/pint --test. Feature tests exercise token rotation, authorization, kobo amounts, mocked Paystack verification responses, repeated verification, and payout progression. Tests use isolated SQLite; the configured application database is MySQL. A real Paystack test checkout and webhook require the account test secret and a public HTTPS webhook URL.
