@@ -1,6 +1,6 @@
 # AjoPlus API
 
-Laravel 12 JSON API for rotating savings groups. It uses MySQL, Sanctum bearer tokens, and integer kobo for every monetary field. The Flutter client is a separate project.
+Laravel 12 JSON API for rotating and fixed-period savings groups. It uses MySQL, Sanctum bearer tokens, and integer kobo for every monetary field. The Flutter client is a separate project.
 
 ## Setup
 
@@ -43,7 +43,9 @@ All paths are under /api/v1. Send Accept: application/json. Protected routes req
 | GET | /notifications | Paginated notifications |
 | PATCH | /notifications/{notification}/read | Mark notification read |
 
-Group creation requires a name, integer contribution_amount_kobo, frequency (daily, weekly, biweekly, or monthly), max_members (2-100), and start_date (YYYY-MM-DD). The creator holds payout position 1. The group opens for contributions when all positions fill.
+Group creation requires a name, integer contribution_amount_kobo, frequency (daily, weekly, biweekly, or monthly), max_members (2-200), and start_date (YYYY-MM-DD). Set `ajo_type` to `rotating` (the default for existing groups) or `savings`. Savings groups require integer `savings_cycles` from 1 to 365; rotating groups must omit it. The creator holds payout position 1. Members can contribute while the group forms; completing a cycle requires every position to be filled and paid.
+
+Rotating Ajo prepares one member's pooled payout each cycle and advances after settlement. Savings Ajo advances fully paid cycles without a payout. After the final period ends (start date plus `savings_cycles` periods), complete-cycle prepares a repayment for each member, equal to their accumulated contributions. A savings schedule lists every member on the same maturity date. For Savings Ajo, settle-payout requires `payout_id` plus a unique external transfer `reference` for each repayment. The group completes only after all repayments are settled. Dates and authorization are enforced by the server; an early repayment is rejected.
 
 Paystack checkout amount comes from the stored contribution, never from the client. Verification checks reference, exact integer kobo amount, NGN currency, test domain, and customer email before recording a paid contribution. Webhook signatures are HMAC SHA-512 checked, then the transaction is verified with Paystack again. Repeated verification is idempotent.
 
