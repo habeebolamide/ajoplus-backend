@@ -34,6 +34,7 @@ class GroupController extends Controller
                 ...$request->validated(),
                 'creator_id' => $request->user()->id,
                 'invite_code' => $this->inviteCode(),
+                'ajo_type' => $request->input('ajo_type', 'rotating'),
                 'current_cycle' => 1,
                 'status' => 'forming',
                 'requires_approval' => $request->boolean('requires_approval', true),
@@ -236,7 +237,7 @@ class GroupController extends Controller
 
         return response()->json([...$group->only([
             'id', 'name', 'description', 'contribution_amount_kobo', 'frequency',
-            'max_members', 'start_date', 'members_count', 'status', 'requires_approval',
+            'max_members', 'start_date', 'members_count', 'status', 'requires_approval', 'ajo_type', 'savings_cycles',
         ]), 'join_request_status' => $joinRequestStatus]);
     }
 
@@ -245,16 +246,20 @@ class GroupController extends Controller
         $this->requireMembership($request, $group);
 
         $members = $group->members()->with('user:id,name')->orderBy('payout_position')->get();
-        $payouts = $group->payouts()->get()->keyBy('cycle');
-        $poolKobo = $group->contribution_amount_kobo * $group->max_members;
+        $payouts = $group->payouts()->get();
 
-        return response()->json(['data' => $members->map(fn ($member) => [
-            'cycle' => $member->payout_position,
-            'recipient' => $member->user,
-            'scheduled_for' => GroupSchedule::dateForCycle($group, $member->payout_position),
-            'amount_kobo' => $poolKobo,
-            'status' => $payouts->has($member->payout_position) ? 'completed' : 'pending',
-        ])]);
+        return response()->json(['data' => $members->map(function ($member) use ($group, $payouts) {
+            $cycle = $group->isSavings() ? $group->totalCycles() : $member->payout_position;
+            $payout = $payouts->first(fn ($row) => $row->member_id === $member->id && $row->cycle === $cycle);
+
+            return [
+                'cycle' => $cycle,
+                'recipient' => $member->user,
+                'scheduled_for' => GroupSchedule::dateForCycle($group, $group->isSavings() ? $cycle + 1 : $cycle),
+                'amount_kobo' => $group->contribution_amount_kobo * ($group->isSavings() ? $group->totalCycles() : $group->max_members),
+                'status' => $payout?->status ?? 'pending',
+            ];
+        })]);
     }
 
     public function contributions(Request $request, SavingsGroup $group): JsonResponse

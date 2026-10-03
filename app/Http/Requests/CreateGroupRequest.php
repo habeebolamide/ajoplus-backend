@@ -15,6 +15,8 @@ class CreateGroupRequest extends FormRequest
             'contribution_amount_kobo' => ['required', 'integer', 'min:1', 'max:1000000000000'],
             'frequency' => ['required', Rule::in(['daily', 'weekly', 'biweekly', 'monthly'])],
             'max_members' => ['required', 'integer', 'min:2', 'max:200'],
+            'ajo_type' => ['sometimes', Rule::in(['rotating', 'savings'])],
+            'savings_cycles' => ['required_if:ajo_type,savings', 'prohibited_unless:ajo_type,savings', 'integer', 'min:1', 'max:365'],
             'requires_approval' => ['sometimes', 'boolean'],
             'start_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
         ];

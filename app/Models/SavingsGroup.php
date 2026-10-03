@@ -8,11 +8,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SavingsGroup extends Model
 {
-    protected $fillable = ['creator_id', 'name', 'description', 'contribution_amount_kobo', 'frequency', 'max_members', 'start_date', 'invite_code', 'current_cycle', 'status', 'requires_approval'];
+    protected $fillable = ['creator_id', 'name', 'description', 'contribution_amount_kobo', 'frequency', 'max_members', 'start_date', 'invite_code', 'current_cycle', 'status', 'requires_approval', 'ajo_type', 'savings_cycles'];
 
     protected function casts(): array
     {
-        return ['contribution_amount_kobo' => 'integer', 'max_members' => 'integer', 'current_cycle' => 'integer', 'start_date' => 'date:Y-m-d', 'requires_approval' => 'boolean'];
+        return ['contribution_amount_kobo' => 'integer', 'max_members' => 'integer', 'current_cycle' => 'integer', 'start_date' => 'date:Y-m-d', 'requires_approval' => 'boolean', 'savings_cycles' => 'integer'];
+    }
+
+    public function isSavings(): bool
+    {
+        return $this->ajo_type === 'savings';
+    }
+
+    public function totalCycles(): int
+    {
+        return $this->isSavings() ? $this->savings_cycles : $this->max_members;
     }
 
     public function creator(): BelongsTo
